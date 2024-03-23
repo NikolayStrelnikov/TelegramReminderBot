@@ -145,7 +145,6 @@ def user_set_period(call: types.CallbackQuery):
     message = call.message
     user_id = message.chat.id
     choose = call.data
-
     # записали периодичность в базу
     bot.user_action.set_period(choose, user_id)
     mess = f'Введите период между регулярными напоминаниями\n'
@@ -154,7 +153,6 @@ def user_set_period(call: types.CallbackQuery):
         reminder_set_active(factor='0', user_id=user_id)
         mess = 'Напоминание от бота придет вам один раз'
     elif choose == 'WORKDAY':
-        # TOD: как сделать выбор дней недели?
         mess += ('1 - повторение по понедельникам в указанное вами время,\n'
                  '2,4 - повторение по вторникам и четвергам,\n'
                  '1,2,3,4,5 - повторение по будням')
