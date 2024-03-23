@@ -3,10 +3,9 @@ import threading
 import calendar
 from datetime import datetime, timedelta
 from dateutil import relativedelta
-from dateutil.parser import parse
+from dateutil.parser import parse, parserinfo
 
 
-# -----------------------------------------------------------
 # Метод расчета времени ожидания до вызова таймера
 def reminder_wait():
     timeout = 60
@@ -32,18 +31,16 @@ def reminder_wait():
     re_timer.start()
 
 
-# -----------------------------------------------------------
 # Метод рассылки сообщений
 def reminder_send(*args):
     if args:
         for i in args:
             chat_id = i[1]
-            message = f'<b><u>🌟Напоминание:</u></b>\n{i[6]}'
+            message = f'<b><u>🌟Напоминание:</u></b>\n\n{i[6]}'
             bot.send_message(chat_id, message, 'html')
     reminder_update_base(*args)
 
 
-# -----------------------------------------------------------
 # Метод обновления дат в базе данных
 def reminder_update_base(*args):
     if args:
@@ -93,23 +90,24 @@ def reminder_update_base(*args):
     reminder_wait()
 
 
-# -----------------------------------------------------------
 # Метод проверки даты-времени
 def valid_date(message):
     try:
         # date_time = datetime.strptime(message.text, '%Y-%m-%d %H:%M')
-        date_time = parse(message.text, dayfirst=True, fuzzy=False)
+        date_time = parse(message.text, dayfirst=True, fuzzy=False, parserinfo=RussianParserInfo())
         if date_time < datetime.now():
             bot.reply_to(message, f'Введены дата и/или время в прошлом: {date_time} \nПопробуйте еще раз')
             return False
+        elif date_time > datetime(2099, 12, 31):
+            bot.reply_to(message, f'Ограничимся напоминаниями в нашем веке до 2099 года? \nПопробуйте еще раз')
         else:
             return date_time
     except ValueError:
-        bot.reply_to(message, 'Вы ввели некорректные дату и время, \nпример: 19.03.2025 22:14 ')
+        bot.reply_to(message, f'Вы ввели некорректные дату и время,\n'
+                              f'пример: {datetime.now().strftime("%d.%m.%Y %H:%M")}')
         return False
 
 
-# -----------------------------------------------------------
 # Метод формирования МЕНЮ
 def build_menu(buttons, n_cols: int, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -120,15 +118,42 @@ def build_menu(buttons, n_cols: int, header_buttons=None, footer_buttons=None):
     return menu
 
 
-# -----------------------------------------------------------
 # Метод активации сообщения
 def reminder_set_active(factor, user_id):
     bot.user_action.set_active(factor, user_id)
 
 
-# -----------------------------------------------------------
 # Обрабатываем Exception
 def create_err_msg(err: Exception) -> str:
     current_date = datetime.now().strftime('%H:%M:%S %d/%m/%y')
     err_mess = f'Ошибка бота. Время: {current_date}\n{err.__class__}:\n{err}'
     return err_mess
+
+
+class RussianParserInfo(parserinfo):
+    MONTHS = [('Янв', 'Январь', 'Января', 'Jan', 'January'),
+              ('Фев', 'Февраль', 'Февраля', 'Feb', 'February'),
+              ('Мар', 'Март', 'Марта', 'Mar', 'March'),
+              ('Апр', 'Апрель', 'Апреля', 'Apr', 'April'),
+              ('Май', 'Май', 'Мая', 'May'),
+              ('Июнь', 'Июнь', 'Июня', 'Jun', 'June'),
+              ('Июль', 'Июль', 'Июля', 'Jul', 'July'),
+              ('Авг', 'Август', 'Августа', 'Aug', 'August'),
+              ('Сент', 'Сентябрь', 'Сентября', 'Sep', 'September'),
+              ('Окт', 'Октябрь', 'Октября', 'Oct', 'October'),
+              ('Ноя', 'Ноябрь', 'Ноября', 'Nov', 'November'),
+              ('Дек', 'Декабрь', 'Декабря', 'Dec', 'December')]
+
+    PERTAIN = ['г.', 'г', 'of']
+
+    WEEKDAYS = [('Пн', 'Понедельник', 'Mon', 'Monday'),
+                ('Вт', 'Вторник', 'Tue', 'Tuesday'),
+                ('Ср', 'Среда', 'Wed', 'Wednesday'),
+                ('Чт', 'Четверг', 'Thu', 'Thursday'),
+                ('Пт', 'Пятница', 'Fri', 'Friday'),
+                ('Сб', 'Суббота', 'Sat', 'Saturday'),
+                ('Вс', 'Воскресенье', 'Sun', 'Sunday')]
+
+    HMS = [('ч', 'час', 'часа', 'часов', 'h', 'hour', 'hours'),
+           ('м', 'мин', 'минута', 'минуты', 'минут', 'm', 'min', 'minute', 'minutes'),
+           ('с', 'сек', 'секунда', 'секунды', 'секунд', 's', 'sec', 'second', 'seconds')]

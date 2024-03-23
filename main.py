@@ -3,6 +3,8 @@ from reminder import reminder_wait, reminder_set_active, valid_date, build_menu,
 # from logging import getLogger, StreamHandler
 from telebot import types
 
+prev_message = None
+
 
 @bot.message_handler(commands=['start', 'help'])
 def user_start(message: types.Message):
@@ -43,6 +45,7 @@ def user_start(message: types.Message):
 
 @bot.message_handler(commands=['set'])
 def user_chat_menu(message: types.Message):
+    global prev_message
     chat_id = message.chat.id
     user_id = message.from_user.id
     groups = user_action.get_groups(user_id)
@@ -57,12 +60,15 @@ def user_chat_menu(message: types.Message):
         keyboard.add(*button_list)
         # n_cols = 1 is for single column and multiple rows
         reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+        if prev_message:
+            bot.delete_message(chat_id=chat_id, message_id=prev_message.message_id)
         mess = f'Выберите чат, где вы хотите создать напоминание'
-        bot.send_message(chat_id, mess, reply_markup=reply_markup)
+        prev_message = bot.send_message(chat_id, mess, reply_markup=reply_markup)
 
 
 @bot.message_handler(commands=['delete'])
 def user_chat_menu(message: types.Message):
+    global prev_message
     chat_id = message.chat.id
     user_id = message.from_user.id
     reminds = user_action.get_all_active(user_id)
@@ -73,8 +79,11 @@ def user_chat_menu(message: types.Message):
             button_list.append(types.InlineKeyboardButton(text=i[1], callback_data=f'DELETE:{i[0]}'))
         keyboard.add(*button_list)
         reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
-        mess = f'Выберите напоминание, которое хотите удалить'
-        bot.send_message(chat_id, mess, reply_markup=reply_markup)
+        if prev_message:
+            bot.delete_message(chat_id=chat_id, message_id=prev_message.message_id)
+        mess = f'Выберите напоминание, которое хотите удалить' if reminds \
+            else f'Вы еще не создали ни одного напоминания, воспользуйтесь командой /set'
+        prev_message = bot.send_message(chat_id, mess, reply_markup=reply_markup)
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('DELETE:'))
@@ -104,7 +113,9 @@ def user_set_remind(message: types.Message):
 
 @bot.message_handler(func=lambda message: bot.user_action.get_count_status(message.from_user.id, 'TEXT') == 1)
 def user_set_date_time(message: types.Message):
+    global prev_message
     user_id = message.from_user.id
+    chat_id = message.chat.id
     message_date_time = valid_date(message)
 
     if message_date_time:
@@ -121,8 +132,10 @@ def user_set_date_time(message: types.Message):
         ]
         keyboard.add(*button_list)
         reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+        if prev_message:
+            bot.delete_message(chat_id=chat_id, message_id=prev_message.message_id)
         mess = f'Выберите периодичность и частоту напоминаний бота'
-        bot.send_message(message.chat.id, mess, 'html', reply_markup=reply_markup)
+        prev_message = bot.send_message(message.chat.id, mess, 'html', reply_markup=reply_markup)
         bot.user_action.set_time(message.from_user.id)
 
 
@@ -152,7 +165,6 @@ def user_set_period(call: types.CallbackQuery):
         mess += ('1 - повторение еженедельно в указанное вами время и день недели,\n'
                  '2 - каждую вторую неделю и т.д.')
     elif choose == 'MONTHLY':
-
         mess += ('1 - повторение ежемесячно в указанное вами время и число месяца,\n'
                  '2 - каждый второй месяц и т.д.')
 
@@ -183,7 +195,7 @@ def user_set_factor(message: types.Message):
             if 0 < val < 367:
                 reminder_set_active(val, user_id)
                 bot.send_message(message.chat.id,
-                                 f'Напоминание будет приходить каждый {val if val > 1 else ''} день', 'html')
+                                 f"Напоминание будет приходить каждый {val if val > 1 else ''} день", "html")
             else:
                 bot.send_message(message.chat.id, 'Число должно быть от 1 до 366', 'html')
         except ValueError:
@@ -196,7 +208,7 @@ def user_set_factor(message: types.Message):
             if 0 < val < 53:
                 reminder_set_active(val, user_id)
                 bot.send_message(message.chat.id,
-                                 f'Напоминание будет приходить каждую {val if val > 1 else ''} неделю', 'html')
+                                 f"Напоминание будет приходить каждую {val if val > 1 else ''} неделю", "html")
             else:
                 bot.send_message(message.chat.id, 'Число должно быть от 1 до 52', 'html')
         except ValueError:
@@ -209,7 +221,7 @@ def user_set_factor(message: types.Message):
             if 0 < val < 13:
                 reminder_set_active(val, user_id)
                 bot.send_message(message.chat.id,
-                                 f'Напоминание будет приходить каждый {val if val > 1 else ''} месяц', 'html')
+                                 f"Напоминание будет приходить каждый {val if val > 1 else ''} месяц", "html")
             else:
                 bot.send_message(message.chat.id, 'Число должно быть от 1 до 12', 'html')
         except ValueError:
