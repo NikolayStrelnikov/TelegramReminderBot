@@ -1,4 +1,4 @@
-from config import *
+from config import user_action, bot
 import threading
 import calendar
 from datetime import datetime, timedelta

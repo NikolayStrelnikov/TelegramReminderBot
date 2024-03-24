@@ -1,9 +1,11 @@
-from config import *
+from config import user_action, bot, ADMIN_CHAT_ID
 from reminder import reminder_wait, reminder_set_active, valid_date, build_menu, create_err_msg
-# from logging import getLogger, StreamHandler
 from telebot import types
-
-prev_message = None
+from telebot.apihelper import ApiTelegramException
+import time
+# from logging import getLogger, StreamHandler
+# TODO: обрабатывать события, если бот выгнан из чата - удалять из базы регистрацию и все напоминания этой группы
+# TODO: обрабатывать события, если пользователь заблокировал бота - удалять из базы все напоминания этого пользователя
 
 
 @bot.message_handler(commands=['start', 'help'])
@@ -44,11 +46,11 @@ def user_start(message: types.Message):
 
 
 @bot.message_handler(commands=['set'])
-def user_chat_menu(message: types.Message):
-    global prev_message
+def user_set_menu(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     groups = user_action.get_groups(user_id)
+    last_mess_id = user_action.get_last_mess_id(user_id)
     if chat_id == user_id:
         # удалим все предыдущие черновики этого пользователя
         bot.user_action.delete_event(user_id)
@@ -60,18 +62,28 @@ def user_chat_menu(message: types.Message):
         keyboard.add(*button_list)
         # n_cols = 1 is for single column and multiple rows
         reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
-        if prev_message:
-            bot.delete_message(chat_id=chat_id, message_id=prev_message.message_id)
         mess = f'Выберите чат, где вы хотите создать напоминание'
-        prev_message = bot.send_message(chat_id, mess, reply_markup=reply_markup)
+
+        if last_mess_id:
+            try:
+                bot.delete_message(chat_id, last_mess_id)
+            except ApiTelegramException:
+                pass
+        new_message = bot.send_message(chat_id, mess, 'html', reply_markup=reply_markup)
+        user_action.set_last_mess_id(new_message.message_id, user_id)
+
+    # Групповой чат
+    else:
+        mess = f'Управлять напоминаниями группового чата может только их автор с помощью персонального чата с ботом'
+        bot.send_message(message.chat.id, mess, 'html')
 
 
 @bot.message_handler(commands=['delete'])
-def user_chat_menu(message: types.Message):
-    global prev_message
+def user_delete_menu(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     reminds = user_action.get_all_active(user_id)
+    last_mess_id = user_action.get_last_mess_id(user_id)
     if chat_id == user_id:
         keyboard = types.InlineKeyboardMarkup()
         button_list = []
@@ -79,11 +91,21 @@ def user_chat_menu(message: types.Message):
             button_list.append(types.InlineKeyboardButton(text=i[1], callback_data=f'DELETE:{i[0]}'))
         keyboard.add(*button_list)
         reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
-        if prev_message:
-            bot.delete_message(chat_id=chat_id, message_id=prev_message.message_id)
         mess = f'Выберите напоминание, которое хотите удалить' if reminds \
             else f'Вы еще не создали ни одного напоминания, воспользуйтесь командой /set'
-        prev_message = bot.send_message(chat_id, mess, reply_markup=reply_markup)
+
+        if last_mess_id:
+            try:
+                bot.delete_message(chat_id, last_mess_id)
+            except ApiTelegramException:
+                pass
+        new_message = bot.send_message(chat_id, mess, 'html', reply_markup=reply_markup)
+        user_action.set_last_mess_id(new_message.message_id, user_id)
+
+    # Групповой чат
+    else:
+        mess = f'Управлять напоминаниями группового чата может только их автор с помощью персонального чата с ботом'
+        bot.send_message(message.chat.id, mess, 'html')
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('DELETE:'))
@@ -97,8 +119,10 @@ def delete_by_id(call: types.CallbackQuery):
 @bot.callback_query_handler(func=lambda call: True & bot.user_action.get_all_count_status(call.message.chat.id) == 0)
 def user_set_chat(call: types.CallbackQuery):
     chat_id = int(call.data)
+    user_id = call.message.chat.id  # call возвращает id бота, берем чат
+
     # создадим один новый черновик
-    bot.user_action.set_new_event(chat_id)
+    bot.user_action.set_new_event(chat_id=chat_id, user_id=user_id)
     mess = f'О чем вам напомнить?'
     bot.edit_message_text(mess, call.message.chat.id, call.message.message_id)
 
@@ -113,10 +137,10 @@ def user_set_remind(message: types.Message):
 
 @bot.message_handler(func=lambda message: bot.user_action.get_count_status(message.from_user.id, 'TEXT') == 1)
 def user_set_date_time(message: types.Message):
-    global prev_message
     user_id = message.from_user.id
     chat_id = message.chat.id
     message_date_time = valid_date(message)
+    last_mess_id = user_action.get_last_mess_id(user_id)
 
     if message_date_time:
         last_up = message_date_time.day
@@ -132,10 +156,16 @@ def user_set_date_time(message: types.Message):
         ]
         keyboard.add(*button_list)
         reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
-        if prev_message:
-            bot.delete_message(chat_id=chat_id, message_id=prev_message.message_id)
         mess = f'Выберите периодичность и частоту напоминаний бота'
-        prev_message = bot.send_message(message.chat.id, mess, 'html', reply_markup=reply_markup)
+
+        if last_mess_id:
+            try:
+                bot.delete_message(chat_id, last_mess_id)
+            except ApiTelegramException:
+                pass
+        new_message = bot.send_message(chat_id, mess, 'html', reply_markup=reply_markup)
+        user_action.set_last_mess_id(new_message.message_id, user_id)
+
         bot.user_action.set_time(message.from_user.id)
 
 
@@ -145,6 +175,7 @@ def user_set_period(call: types.CallbackQuery):
     message = call.message
     user_id = message.chat.id
     choose = call.data
+
     # записали периодичность в базу
     bot.user_action.set_period(choose, user_id)
     mess = f'Введите период между регулярными напоминаниями\n'
@@ -153,6 +184,7 @@ def user_set_period(call: types.CallbackQuery):
         reminder_set_active(factor='0', user_id=user_id)
         mess = 'Напоминание от бота придет вам один раз'
     elif choose == 'WORKDAY':
+        # TOD: как сделать выбор дней недели?
         mess += ('1 - повторение по понедельникам в указанное вами время,\n'
                  '2,4 - повторение по вторникам и четвергам,\n'
                  '1,2,3,4,5 - повторение по будням')
@@ -176,7 +208,7 @@ def user_set_factor(message: types.Message):
     choose = bot.user_action.get_period(user_id)
 
     if choose == 'WORKDAY':
-        # GOOD: проверяем что заданы цифры (1,2,3,4,5,6,7), пишем фактор в базу...
+        # проверяем что заданы цифры (1,2,3,4,5,6,7), пишем фактор в базу...
         val = sorted(set(factor))
         result = ''
         for i in val:
@@ -187,7 +219,7 @@ def user_set_factor(message: types.Message):
         bot.send_message(message.chat.id, mess, 'html')
 
     elif choose == 'DAILY':
-        # GOOD: проверяем что это число и оно не меньше 1 и не больше 366
+        # проверяем что это число и оно не меньше 1 и не больше 366
         try:
             val = int(factor)
             if 0 < val < 367:
@@ -227,7 +259,7 @@ def user_set_factor(message: types.Message):
 
 
 # -----------------------------------------------------------
-# Создаем логирование
+# Создаем логирование, пока оно не нужно
 # logger = getLogger(__name__)
 # logger.addHandler(StreamHandler())
 # logger.setLevel('INFO')
@@ -235,6 +267,10 @@ def user_set_factor(message: types.Message):
 
 # Обернули ошибки запуска
 while True:
+    msg = f'{time.ctime()}: Запуск бота'
+    bot.telegram_client.post(method='sendMessage',
+                             params={'text': msg,
+                                     'chat_id': ADMIN_CHAT_ID})
     try:
         bot.setup_resources()
         reminder_wait()
@@ -246,3 +282,4 @@ while True:
                                          'chat_id': ADMIN_CHAT_ID})
         # logger.error(error_message)
         bot.shutdown()
+    time.sleep(5)

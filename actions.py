@@ -11,7 +11,8 @@ class UserActions:
 
     INSERT_EVENT = """
         INSERT INTO reminders (CHAT_ID, USER_ID, TITLE, USERNAME, STATUS) 
-        SELECT CHAT_ID, USER_ID, TITLE, USERNAME, 'NEW' FROM reminders WHERE STATUS = 'REGISTER' AND CHAT_ID = ?;
+        SELECT CHAT_ID, USER_ID, TITLE, USERNAME, 'NEW' FROM reminders 
+        WHERE STATUS = 'REGISTER' AND CHAT_ID = ? AND USER_ID = ?;
     """
 
     # SETTERS DELETE
@@ -45,6 +46,10 @@ class UserActions:
 
     SET_STATUS_UPDATE = """
         UPDATE reminders SET LAST_UP = ?, NEXT_UP = ? WHERE ID = ?;
+    """
+
+    SET_LAST_MESS_ID = """
+        UPDATE reminders SET MESS_ID = ? WHERE STATUS='REGISTER' AND USER_ID = ?;
     """
 
     # ---------------------------------------------------------
@@ -85,6 +90,10 @@ class UserActions:
         SELECT CHAT_ID FROM reminders WHERE STATUS = ? AND USER_ID = ?
     """
 
+    GET_LAST_MESS_ID = """
+        SELECT MAX(MESS_ID) FROM reminders WHERE STATUS='REGISTER' AND USER_ID = ?
+    """
+
     def __init__(self, database_client: SQLiteClient):
         self.database_client = database_client
 
@@ -99,8 +108,8 @@ class UserActions:
     def set_register(self, chat_id: int, user_id: int, username: str, status: str, title: str):
         self.database_client.execute_command(self.INSERT_REGISTER, (chat_id, user_id, username, status, title))
 
-    def set_new_event(self, chat_id: int):
-        self.database_client.execute_command(self.INSERT_EVENT, (chat_id,))
+    def set_new_event(self, chat_id: int, user_id: int):
+        self.database_client.execute_command(self.INSERT_EVENT, (chat_id, user_id))
 
     def delete_event(self, user_id: int):
         self.database_client.execute_command(self.DELETE_EVENT, (user_id,))
@@ -125,6 +134,9 @@ class UserActions:
 
     def set_active(self, factor: str, user_id: int):
         self.database_client.execute_command(self.SET_ACTIVE, (factor, user_id))
+
+    def set_last_mess_id(self, mess_id: int, user_id: int):
+        self.database_client.execute_command(self.SET_LAST_MESS_ID, (mess_id, user_id))
 
     # ---------------------------------------------------------
     # GETTERS
@@ -155,3 +167,13 @@ class UserActions:
         result = self.database_client.execute_select_command(self.GET_CHAT_ID, (status, user_id))
         groups_list = [i[0] for i in result]
         return False if chat_id in groups_list else True
+
+    def get_last_mess_id(self, user_id: int):
+        return self.database_client.execute_select_command(self.GET_LAST_MESS_ID, (user_id,))[0][0]
+
+
+# user_action = UserActions(SQLiteClient('db/remind.db'))
+# user_action.setup()
+# print(
+#     user_action.get_last_mess_id(348216627)
+# )
