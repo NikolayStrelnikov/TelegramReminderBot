@@ -4,6 +4,7 @@ import calendar
 from datetime import datetime, timedelta
 from dateutil import relativedelta
 from dateutil.parser import parse, parserinfo
+from telebot.apihelper import ApiException
 
 
 # Метод расчета времени ожидания до вызова таймера
@@ -19,15 +20,19 @@ def reminder_wait():
     if 0 < delta < timeout:
         re_timer = threading.Timer(delta, reminder_send, actual_queue)
         # если есть что послать, создаем напоминания
-        # print(datetime.now(), 'ПОШЛЕМ ЭТО', delta, actual_queue)
+        print(datetime.now(), 'ПОШЛЕМ ЭТО', delta, actual_queue)
     elif need_update_queue:
         re_timer = threading.Timer(timeout, reminder_update_base, need_update_queue)
         # если есть что обновить в базе, создаем обновления
-        # print(datetime.now(), 'ОБНОВИМ БАЗУ', timeout, need_update_queue)
+        print(datetime.now(), 'ОБНОВИМ БАЗУ', timeout, need_update_queue)
     else:
         re_timer = threading.Timer(timeout, reminder_send, [])
         # если не посылаем и не обновляем данных, то просто перезапускаем таймер
-        # print(datetime.now(), 'НИЧЕГО НЕ ПОШЛШЕМ, ОБНОВИМ ТАЙМЕР')
+        print(datetime.now(), 'НИЧЕГО НЕ ПОШЛШЕМ, ОБНОВИМ ТАЙМЕР')
+
+    # Проверим, не запущен ли таймер после краша бота, возможно это его остановит
+    if re_timer.is_alive():
+        re_timer.cancel()
     re_timer.start()
 
 
@@ -37,7 +42,19 @@ def reminder_send(*args):
         for i in args:
             chat_id = i[1]
             message = f'<b><u>🌟Напоминание:</u></b>\n\n{i[6]}'
-            bot.send_message(chat_id, message, 'html')
+            try:
+                bot.send_message(chat_id, message, 'html')
+            except ApiException as e:
+                if e.result.status_code == 403:
+                    if ('bot was blocked by the user' in e.result.text
+                            or 'bot can\'t initiate conversation with a user' in e.result.text
+                            or 'user is deactivated' in e.result.text):
+                        bot.user_action.delete_all_by_user_id(chat_id)
+                    elif ('bot was kicked from the group chat' in e.result.text
+                          or 'bot was blocked by the channel' in e.result.text):
+                        bot.user_action.delete_all_by_chat_id(chat_id)
+                else:
+                    raise e
     reminder_update_base(*args)
 
 
@@ -58,6 +75,18 @@ def reminder_update_base(*args):
                 # next_date = 0
                 # user_action.set_status_update(last_up, next_date, base_id)
                 bot.user_action.delete_event_by_id(base_id)
+
+            elif period == 'MINUTE':
+                next_date = last_up
+                while next_date < datetime.now():
+                    next_date += timedelta(minutes=int(factor))
+                user_action.set_status_update(last_up, next_date, base_id)
+
+            elif period == 'HOUR':
+                next_date = last_up
+                while next_date < datetime.now():
+                    next_date += timedelta(hours=int(factor))
+                user_action.set_status_update(last_up, next_date, base_id)
 
             elif period == 'WORKDAY':
                 current_week_day = last_up_date.weekday() + 1

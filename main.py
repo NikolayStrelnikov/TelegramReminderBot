@@ -109,7 +109,7 @@ def user_delete_menu(message: types.Message):
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('DELETE:'))
-def delete_by_id(call: types.CallbackQuery):
+def user_delete_remind(call: types.CallbackQuery):
     base_id = int(call.data.partition(':')[2])
     mess = f'Напоминание удалено'
     bot.edit_message_text(mess, call.message.chat.id, call.message.message_id)
@@ -267,14 +267,15 @@ def user_set_factor(message: types.Message):
 
 # Обернули ошибки запуска
 while True:
-    msg = f'{time.ctime()}: Запуск бота'
-    bot.telegram_client.post(method='sendMessage',
-                             params={'text': msg,
-                                     'chat_id': ADMIN_CHAT_ID})
+    # msg = f'{time.ctime()}: Запуск бота'
+    # bot.telegram_client.post(method='sendMessage',
+    #                          params={'text': msg,
+    #                                  'chat_id': ADMIN_CHAT_ID})
     try:
         bot.setup_resources()
         reminder_wait()
-        bot.polling()
+        # bot.polling()
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as error:
         error_message = create_err_msg(error)
         bot.telegram_client.post(method='sendMessage',
