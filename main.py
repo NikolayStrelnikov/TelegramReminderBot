@@ -2,10 +2,9 @@ from config import user_action, bot, ADMIN_CHAT_ID
 from reminder import reminder_wait, reminder_set_active, valid_date, build_menu, create_err_msg
 from telebot import types
 from telebot.apihelper import ApiTelegramException
+from datetime import datetime
 import time
 # from logging import getLogger, StreamHandler
-# TODO: обрабатывать события, если бот выгнан из чата - удалять из базы регистрацию и все напоминания этой группы
-# TODO: обрабатывать события, если пользователь заблокировал бота - удалять из базы все напоминания этого пользователя
 
 
 @bot.message_handler(commands=['start', 'help'])
@@ -75,6 +74,24 @@ def user_set_menu(message: types.Message):
     # Групповой чат
     else:
         mess = f'Управлять напоминаниями группового чата может только их автор с помощью персонального чата с ботом'
+        bot.send_message(message.chat.id, mess, 'html')
+
+
+@bot.message_handler(commands=['status'])
+def user_get_status(message: types.Message):
+    chat_id = message.chat.id
+    if chat_id == ADMIN_CHAT_ID:
+        start_time = datetime.strptime(bot_start_time, "%a %b %d %H:%M:%S %Y")
+        uptime_bot = datetime.now() - start_time
+        all_users = user_action.get_all_users()
+        all_users_str = ' '.join(all_users)
+        count_users = len(all_users)
+        count_mess = user_action.get_count_mess()
+        mess = (f'<b><u>Bot Statistic and Status:</u></b>'
+                f'\n\n<b>Uptime: </b> {str(uptime_bot).split('.')[0]}'
+                f'\n<b>Messages: </b> {count_mess}'
+                f'\n<b>Users: </b> {count_users}'
+                f'\n<b>Registered: </b> {all_users_str}')
         bot.send_message(message.chat.id, mess, 'html')
 
 
@@ -267,10 +284,11 @@ def user_set_factor(message: types.Message):
 
 # Обернули ошибки запуска
 while True:
-    # msg = f'{time.ctime()}: Запуск бота'
-    # bot.telegram_client.post(method='sendMessage',
-    #                          params={'text': msg,
-    #                                  'chat_id': ADMIN_CHAT_ID})
+    bot_start_time = time.ctime()
+    msg = f'{bot_start_time}: Запуск бота'
+    bot.telegram_client.post(method='sendMessage',
+                             params={'text': msg,
+                                     'chat_id': ADMIN_CHAT_ID})
     try:
         bot.setup_resources()
         reminder_wait()

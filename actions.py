@@ -168,10 +168,25 @@ class UserActions:
 
     def get_last_mess_id(self, user_id: int):
         return self.database_client.execute_select_command(self.GET_LAST_MESS_ID, (user_id,))[0][0]
+
     # ---------------------------------------------------------
+    GET_COUNT_MESS = """ SELECT COUNT(ID) FROM reminders WHERE STATUS='ACTIVE'; """
+
+    def get_count_mess(self):
+        return self.database_client.execute_select_command(self.GET_COUNT_MESS, ())[0][0]
+
+    # ---------------------------------------------------------
+    GET_ALL_USERS = """ SELECT DISTINCT(USERNAME) FROM reminders WHERE STATUS='REGISTER'; """
+
+    def get_all_users(self):
+        result = self.database_client.execute_select_command(self.GET_ALL_USERS, ())
+        users = [f'@{item[0]}' for item in result]
+        return users
+    # ---------------------------------------------------------
+
 
 # user_action = UserActions(SQLiteClient('db/remind.db'))
 # user_action.setup()
 # print(
-#     user_action.get_last_mess_id(348216627)
+#     user_action.get_all_users()
 # )

@@ -20,15 +20,15 @@ def reminder_wait():
     if 0 < delta < timeout:
         re_timer = threading.Timer(delta, reminder_send, actual_queue)
         # если есть что послать, создаем напоминания
-        print(datetime.now(), 'ПОШЛЕМ ЭТО', delta, actual_queue)
+        # print(datetime.now(), 'ПОШЛЕМ ЭТО', delta, actual_queue)
     elif need_update_queue:
         re_timer = threading.Timer(timeout, reminder_update_base, need_update_queue)
         # если есть что обновить в базе, создаем обновления
-        print(datetime.now(), 'ОБНОВИМ БАЗУ', timeout, need_update_queue)
+        # print(datetime.now(), 'ОБНОВИМ БАЗУ', timeout, need_update_queue)
     else:
         re_timer = threading.Timer(timeout, reminder_send, [])
         # если не посылаем и не обновляем данных, то просто перезапускаем таймер
-        print(datetime.now(), 'НИЧЕГО НЕ ПОШЛШЕМ, ОБНОВИМ ТАЙМЕР')
+        # print(datetime.now(), 'НИЧЕГО НЕ ПОШЛШЕМ, ОБНОВИМ ТАЙМЕР')
 
     # Проверим, не запущен ли таймер после краша бота, возможно это его остановит
     if re_timer.is_alive():
