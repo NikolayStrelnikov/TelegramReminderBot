@@ -41,7 +41,7 @@ def reminder_send(*args):
     if args:
         for i in args:
             chat_id = i[1]
-            message = f'<b><u>🌟Напоминание:</u></b>\n\n{i[6]}'
+            message = f'🌟<b><u>Напоминание</u></b>:\n\n{i[6]}'
             try:
                 bot.send_message(chat_id, message, 'html')
             except ApiException as e:
@@ -71,9 +71,6 @@ def reminder_update_base(*args):
             factor = i[5]
 
             if period == 'ONETIME':
-                # разовые вообще удалять надо
-                # next_date = 0
-                # user_action.set_status_update(last_up, next_date, base_id)
                 bot.user_action.delete_event_by_id(base_id)
 
             elif period == 'MINUTE':
@@ -122,7 +119,6 @@ def reminder_update_base(*args):
 # Метод проверки даты-времени
 def valid_date(message):
     try:
-        # date_time = datetime.strptime(message.text, '%Y-%m-%d %H:%M')
         date_time = parse(message.text, dayfirst=True, fuzzy=False, parserinfo=RussianParserInfo())
         if date_time < datetime.now():
             bot.reply_to(message, f'Введены дата и/или время в прошлом: {date_time} \nПопробуйте еще раз')
@@ -150,6 +146,20 @@ def build_menu(buttons, n_cols: int, header_buttons=None, footer_buttons=None):
 # Метод активации сообщения
 def reminder_set_active(factor, user_id):
     bot.user_action.set_active(factor, user_id)
+
+
+# Метод расчета дней недели для чата
+def get_weekdays(days_number):
+    days = {1: 'пн', 2: 'вт', 3: 'ср', 4: 'чт', 5: 'пт', 6: 'сб', 7: 'вс'}
+    days_number = [int(i) for i in str(days_number)]
+    days_number.sort()
+    if days_number == [1, 2, 3, 4, 5]:
+        text_days = 'всем рабочим дням'
+    elif days_number == [6, 7]:
+        text_days = 'выходным'
+    else:
+        text_days = ', '.join([days[i] for i in days_number])
+    return text_days
 
 
 # Обрабатываем Exception

@@ -1,5 +1,5 @@
-from config import user_action, bot, ADMIN_CHAT_ID
-from reminder import reminder_wait, reminder_set_active, valid_date, build_menu, create_err_msg
+from config import bot, ADMIN_CHAT_ID
+from reminder import reminder_wait, reminder_set_active, valid_date, build_menu, create_err_msg, get_weekdays
 from telebot import types
 from telebot.apihelper import ApiTelegramException
 from datetime import datetime
@@ -48,8 +48,8 @@ def user_start(message: types.Message):
 def user_set_menu(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    groups = user_action.get_groups(user_id)
-    last_mess_id = user_action.get_last_mess_id(user_id)
+    groups = bot.user_action.get_groups(user_id)
+    last_mess_id = bot.user_action.get_last_mess_id(user_id)
     if chat_id == user_id:
         # удалим все предыдущие черновики этого пользователя
         bot.user_action.delete_event(user_id)
@@ -69,7 +69,7 @@ def user_set_menu(message: types.Message):
             except ApiTelegramException:
                 pass
         new_message = bot.send_message(chat_id, mess, 'html', reply_markup=reply_markup)
-        user_action.set_last_mess_id(new_message.message_id, user_id)
+        bot.user_action.set_last_mess_id(new_message.message_id, user_id)
 
     # Групповой чат
     else:
@@ -83,12 +83,12 @@ def user_get_status(message: types.Message):
     if chat_id == ADMIN_CHAT_ID:
         start_time = datetime.strptime(bot_start_time, "%a %b %d %H:%M:%S %Y")
         uptime_bot = datetime.now() - start_time
-        all_users = user_action.get_all_users()
+        all_users = bot.user_action.get_all_users()
         all_users_str = ' '.join(all_users)
         count_users = len(all_users)
-        count_mess = user_action.get_count_mess()
+        count_mess = bot.user_action.get_count_mess()
         mess = (f'<b><u>Bot Statistic and Status:</u></b>'
-                f'\n\n<b>Uptime: </b> {str(uptime_bot).split('.')[0]}'
+                f'\n\n<b>Uptime: </b> {str(uptime_bot).split(".")[0]}'
                 f'\n<b>Messages: </b> {count_mess}'
                 f'\n<b>Users: </b> {count_users}'
                 f'\n<b>Registered: </b> {all_users_str}')
@@ -99,8 +99,8 @@ def user_get_status(message: types.Message):
 def user_delete_menu(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    reminds = user_action.get_all_active(user_id)
-    last_mess_id = user_action.get_last_mess_id(user_id)
+    reminds = bot.user_action.get_all_active(user_id)
+    last_mess_id = bot.user_action.get_last_mess_id(user_id)
     if chat_id == user_id:
         keyboard = types.InlineKeyboardMarkup()
         button_list = []
@@ -117,7 +117,7 @@ def user_delete_menu(message: types.Message):
             except ApiTelegramException:
                 pass
         new_message = bot.send_message(chat_id, mess, 'html', reply_markup=reply_markup)
-        user_action.set_last_mess_id(new_message.message_id, user_id)
+        bot.user_action.set_last_mess_id(new_message.message_id, user_id)
 
     # Групповой чат
     else:
@@ -128,9 +128,9 @@ def user_delete_menu(message: types.Message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('DELETE:'))
 def user_delete_remind(call: types.CallbackQuery):
     base_id = int(call.data.partition(':')[2])
+    bot.user_action.delete_event_by_id(base_id)
     mess = f'Напоминание удалено'
     bot.edit_message_text(mess, call.message.chat.id, call.message.message_id)
-    bot.user_action.delete_event_by_id(base_id)
 
 
 @bot.callback_query_handler(func=lambda call: True & bot.user_action.get_all_count_status(call.message.chat.id) == 0)
@@ -140,15 +140,15 @@ def user_set_chat(call: types.CallbackQuery):
 
     # создадим один новый черновик
     bot.user_action.set_new_event(chat_id=chat_id, user_id=user_id)
-    mess = f'О чем вам напомнить?'
+    mess = f"О чём вам напомнить?"
     bot.edit_message_text(mess, call.message.chat.id, call.message.message_id)
 
 
 @bot.message_handler(func=lambda message: bot.user_action.get_count_status(message.from_user.id, 'NEW') == 1)
 def user_set_remind(message: types.Message):
     # записали сообщение в базу
-    bot.user_action.set_remind(message.html_text, message.chat.id)
-    mess = f'Введите дату и время напоминания в формате DD-MM-YYYY hh:mm'
+    bot.user_action.set_text(message.html_text, message.chat.id)
+    mess = f"Введите дату и время напоминания в формате DD-MM-YYYY hh:mm"
     bot.send_message(message.chat.id, mess, 'html')
 
 
@@ -157,7 +157,7 @@ def user_set_date_time(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     message_date_time = valid_date(message)
-    last_mess_id = user_action.get_last_mess_id(user_id)
+    last_mess_id = bot.user_action.get_last_mess_id(user_id)
 
     if message_date_time:
         last_up = message_date_time.day
@@ -181,9 +181,7 @@ def user_set_date_time(message: types.Message):
             except ApiTelegramException:
                 pass
         new_message = bot.send_message(chat_id, mess, 'html', reply_markup=reply_markup)
-        user_action.set_last_mess_id(new_message.message_id, user_id)
-
-        bot.user_action.set_time(message.from_user.id)
+        bot.user_action.set_last_mess_id(new_message.message_id, user_id)
 
 
 @bot.callback_query_handler(
@@ -201,7 +199,6 @@ def user_set_period(call: types.CallbackQuery):
         reminder_set_active(factor='0', user_id=user_id)
         mess = 'Напоминание от бота придет вам один раз'
     elif choose == 'WORKDAY':
-        # TOD: как сделать выбор дней недели?
         mess += ('1 - повторение по понедельникам в указанное вами время,\n'
                  '2,4 - повторение по вторникам и четвергам,\n'
                  '1,2,3,4,5 - повторение по будням')
@@ -214,6 +211,8 @@ def user_set_period(call: types.CallbackQuery):
     elif choose == 'MONTHLY':
         mess += ('1 - повторение ежемесячно в указанное вами время и число месяца,\n'
                  '2 - каждый второй месяц и т.д.')
+    else:
+        mess = 'Вы нашли ошибку 1 в Боте. Напишите автору, он будет очень благодарен'
 
     bot.edit_message_text(mess, message.chat.id, message.message_id)
 
@@ -223,6 +222,7 @@ def user_set_factor(message: types.Message):
     user_id = message.from_user.id
     factor = message.text
     choose = bot.user_action.get_period(user_id)
+    mess = f"Вы ввели не целое число. Попробуйте еще раз"
 
     if choose == 'WORKDAY':
         # проверяем что заданы цифры (1,2,3,4,5,6,7), пишем фактор в базу...
@@ -231,49 +231,47 @@ def user_set_factor(message: types.Message):
         for i in val:
             if i in ["1", "2", "3", "4", "5", "6", "7"]:
                 result = result + i
-        reminder_set_active(result, user_id)
-        mess = f'Напоминание будет повторяться по дням недели: {result}'
-        bot.send_message(message.chat.id, mess, 'html')
-
+        if result:
+            reminder_set_active(result, user_id)
+            mess = f'Напоминание будет повторяться по {get_weekdays(result)}'
+        else:
+            mess = f'Вы не ввели ни одной цифры от 1 до 7, обозначающих дни недели. Попробуйте еще раз'
     elif choose == 'DAILY':
         # проверяем что это число и оно не меньше 1 и не больше 366
         try:
             val = int(factor)
             if 0 < val < 367:
                 reminder_set_active(val, user_id)
-                bot.send_message(message.chat.id,
-                                 f"Напоминание будет приходить каждый {val if val > 1 else ''} день", "html")
+                mess = f"Напоминание будет приходить каждый {val if val > 1 else ''} день"
             else:
-                bot.send_message(message.chat.id, 'Число должно быть от 1 до 366', 'html')
+                mess = f"Число должно быть от 1 до 366"
         except ValueError:
-            bot.send_message(message.chat.id, 'Вы ввели не целое число, попробуйте еще раз', 'html')
-
+            pass
     elif choose == 'WEEKLY':
         # проверяем, что это число и оно не больше 366/7=53
         try:
             val = int(factor)
             if 0 < val < 53:
                 reminder_set_active(val, user_id)
-                bot.send_message(message.chat.id,
-                                 f"Напоминание будет приходить каждую {val if val > 1 else ''} неделю", "html")
+                mess = f"Напоминание будет приходить каждую {val if val > 1 else ''} неделю"
             else:
-                bot.send_message(message.chat.id, 'Число должно быть от 1 до 52', 'html')
+                mess = f"Число должно быть от 1 до 52"
         except ValueError:
-            bot.send_message(message.chat.id, 'Вы ввели не целое число, попробуйте еще раз', 'html')
-
+            pass
     elif choose == 'MONTHLY':
         # проверяем, что это число и оно не больше 12
         try:
             val = int(factor)
             if 0 < val < 13:
                 reminder_set_active(val, user_id)
-                bot.send_message(message.chat.id,
-                                 f"Напоминание будет приходить каждый {val if val > 1 else ''} месяц", "html")
+                mess = f"Напоминание будет приходить каждый {val if val > 1 else ''} месяц"
             else:
-                bot.send_message(message.chat.id, 'Число должно быть от 1 до 12', 'html')
+                mess = f"Число должно быть от 1 до 12"
         except ValueError:
-            bot.send_message(message.chat.id, 'Вы ввели не целое число, попробуйте еще раз', 'html')
-
+            pass
+    else:
+        mess = 'Вы нашли ошибку 2 в Боте. Напишите автору, он будет очень благодарен'
+    bot.send_message(message.chat.id, mess, 'html')
 
 # -----------------------------------------------------------
 # Создаем логирование, пока оно не нужно
