@@ -9,6 +9,7 @@ from actions import UserActions
 from clients.db_client import SQLiteClient
 from clients.telegram_client import TelegramClient
 from config import TOKEN, BASE_URL, DATABASE
+from logger import logger
 
 
 class MyBot(telebot.TeleBot):
@@ -151,7 +152,7 @@ def text_processor(message: types.Message):
             last_up = message_date_time.day
             user_action.set_date(last_up, message_date_time, base_id)  # SET+
 
-            select_period(user_id=user_id, base_id=base_id)
+            select_per(user_id=user_id, base_id=base_id)
 
     elif step == 'FACTOR':
         step_factor(factor=message.text, chat_id=chat_id, base_id=base_id)
@@ -165,14 +166,39 @@ def text_processor(message: types.Message):
                 user_action.set_edit_date(last_up, message_date_time, base_id)  # SET+
                 mess = f'Установлены новые дата и время напоминания: {message_date_time.strftime("%d.%m.%Y %H:%M")}'
                 bot.send_message(message.chat.id, mess, parse_mode='HTML')
-
         elif sub_step == 'EDIT_TEXT':
             user_action.set_edit_text(message.html_text, base_id)  # SET+
             mess = f'Текст напоминания обновлён'
             bot.send_message(message.chat.id, mess, parse_mode='HTML')
-
         elif sub_step == 'EDIT_FACTOR':
             step_factor(factor=message.text, chat_id=chat_id, base_id=base_id)
+        else:
+            help_message(message)
+    else:
+        help_message(message)
+
+
+def help_message(message: types.Message):
+    user_id = message.from_user.id
+    keyboard = types.InlineKeyboardMarkup()
+    button_list = [
+        types.InlineKeyboardButton(text='🆕  Установить новое напоминание', callback_data=f'MSG_SET'),
+        types.InlineKeyboardButton(text='📝  Редактировать свои напоминания', callback_data=f'MSG_EDIT'),
+        types.InlineKeyboardButton(text='🆘  Инструкция по работе с ботом', callback_data=f'MSG_HELP'),
+        types.InlineKeyboardButton(text='⬅️  Отмена', callback_data='CANCEL')
+    ]
+    keyboard.add(*button_list)
+    reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    mess = f'Вы можете воспользоваться функциями:'
+
+    last_mess_id = user_action.get_last_mess_id(user_id)  # GET-
+    if last_mess_id:
+        try:
+            bot.delete_message(user_id, last_mess_id)
+        except ApiTelegramException:
+            pass
+    new_message = bot.send_message(user_id, mess, parse_mode='HTML', reply_markup=reply_markup)
+    user_action.set_last_mess_id(new_message.message_id, user_id)  # SET-
 
 
 def step_factor(factor: str, chat_id: int, base_id: int):
@@ -180,7 +206,7 @@ def step_factor(factor: str, chat_id: int, base_id: int):
     period = remind[7]
     cd = datetime.strptime(remind[6], "%Y-%m-%d %H:%M:%S")
     mess = f'Вы ввели не целое число. Попробуйте еще раз'
-    start_mess = f'Напоминание в группе <b>{remind[3]}</b> установлено и будет повторяться '
+    start_mess = f'Напоминание в группе "<b>{remind[3]}</b>" установлено и будет повторяться '
     end_mess = f'\nВремя следующего напоминания: {cd.strftime("%d.%m.%Y %H:%M")}'
     if period == 'WORKDAY':
         result = check_workday(factor)
@@ -223,7 +249,8 @@ def step_factor(factor: str, chat_id: int, base_id: int):
         except ValueError:
             pass
     else:
-        mess = 'Вы нашли ошибку 2 в Боте. Напишите автору, он будет очень благодарен'
+        logger.error(f'ERROR 2 - step_factor {remind}')
+        mess = 'Ошибка Бота. Напоминание не установлено'
     bot.send_message(chat_id, mess, parse_mode='HTML')
 
 
@@ -237,7 +264,7 @@ def check_workday(factor: str):
     return int(result) if result else 0
 
 
-def choose_period(choose: str, base_id: int):
+def choose_per(choose: str, base_id: int):
     mess = f'Введите период между регулярными напоминаниями'
     if choose == 'ONETIME':
         # проверяем в зависимости от выбора choose
@@ -254,16 +281,17 @@ def choose_period(choose: str, base_id: int):
         mess += ('\n1 - повторение еженедельно в указанное вами время и день недели,'
                  '\n2 - каждую вторую неделю и т.д.')
     elif choose == 'MONTHLY':
-        mess += ('1 - повторение ежемесячно в указанное вами время и число месяца,'
+        mess += ('\n1 - повторение ежемесячно в указанное вами время и число месяца,'
                  '\n2 - каждый второй месяц и т.д.'
-                 '\nЕсли выбранного числа не будет в месяце, то сообщение придёт в последний день'
+                 '\n\nЕсли выбранного числа не будет в месяце, то сообщение придёт в последний день'
                  '\nЕсли число выпадет на выходной, то сообщение придёт в пятницу')
     else:
-        mess = 'Вы нашли ошибку 1 в Боте. Напишите автору, он будет очень благодарен'
+        logger.error(f'ERROR 1 - choose_period {choose}, base_id {base_id}')
+        mess = 'Ошибка Бота. Период напоминания не выбран'
     return mess
 
 
-def select_period(user_id: int, base_id: int):
+def select_per(user_id: int, base_id: int):
     keyboard = types.InlineKeyboardMarkup()
     button_list = [
         types.InlineKeyboardButton(text='Один раз. Без повторов', callback_data=f'PERIOD:ONETIME:{base_id}'),
@@ -287,7 +315,7 @@ def select_period(user_id: int, base_id: int):
     user_action.set_last_mess_id(new_message.message_id, user_id)  # SET-
 
 
-def show_details(remind):
+def show_det(remind):
     cd = datetime.strptime(remind[6], "%Y-%m-%d %H:%M:%S")
     status = remind[10] + ' - <b>' + remind[11] + '</b>' if remind[10] == 'ERROR' else remind[10]
 
@@ -297,3 +325,101 @@ def show_details(remind):
               f'\n<b>Статус: </b>{status}'
               f'\n<b>Сообщение: </b>\n{remind[9]}')
     return result
+
+
+# Добавление нового пользователя или обновление информации группы
+def add_bot(chat_id, user_id, title, username):
+    if bot.user_action.check_create_user(user_id, chat_id):
+        bot.user_action.set_new_user(chat_id=chat_id, user_id=user_id, title=title, username=username)
+    else:
+        bot.user_action.update_exist_user(chat_id=chat_id, user_id=user_id, title=title, username=username)
+
+
+# Сообщение приветствие
+def help_msg(name=None, surname=None):
+    bot_name = bot.get_me().username
+    mess = (f'Привет! <b>{name if name else ""} {surname if surname else ""} </b>'
+            f'\nЭто бот для напоминаний в Телеграм'
+            f'\n\nЧтобы <b>управлять напоминаниями в группе</b>:'
+            f'\n  1. Добавьте в группу бота '
+            f'\n  2. Отправьте в этой группе боту команду /start@{bot_name}'
+            f'\n\nЧтобы <b>создать напоминание</b>, введите команду /set'
+            f'\nНапоминания создаются для любого чата, где вы уже стартовали бота'
+            f'\n\nЧтобы <b>редактировать или удалить</b> напоминание, введите команду /edit')
+    return mess
+
+
+# Меню редактирования сообщений
+def edit_msg(user_id):
+    all_reminds = bot.user_action.get_all_active(user_id)
+    last_mess_id = bot.user_action.get_last_mess_id(user_id)
+    bot.user_action.delete_update_event(user_id)
+
+    if all_reminds:
+        # Преобразование строки в объект datetime
+        for i in range(len(all_reminds)):
+            all_reminds[i] = (all_reminds[i][:2] +
+                              (datetime.strptime(all_reminds[i][2], "%Y-%m-%d %H:%M:%S"),) +
+                              all_reminds[i][3:])
+        # Сортировка по дате
+        all_reminds.sort(key=lambda x: x[2])
+    keyboard = types.InlineKeyboardMarkup()
+    button_list = []
+    for i in all_reminds:
+        if i[3] == 'PAUSE':
+            actual = '⏸'
+            if i[4] == 'EDIT_DATE':
+                actual = '⏰'
+            elif i[4] == 'EDIT_PERIOD':
+                actual = '💫'
+            elif i[4] == 'EDIT_TEXT':
+                actual = '✏️'
+        elif i[3] == 'ERROR':
+            actual = '⚠️'
+        else:
+            actual = i[2].strftime("%d.%m.%Y")
+        button_list.append(types.InlineKeyboardButton(text=f'{actual} : {i[1]}', callback_data=f'MODIFY:{i[0]}'))
+    if button_list:
+        button_list.append(types.InlineKeyboardButton(text='⬅️  Отмена', callback_data='CANCEL'))
+    keyboard.add(*button_list)
+    reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    mess = f'Выберите напоминание, которое хотите изменить или удалить' if all_reminds \
+        else f'Вы еще не создали ни одного напоминания, воспользуйтесь командой /set'
+
+    if last_mess_id:
+        try:
+            bot.delete_message(user_id, last_mess_id)
+        except ApiTelegramException:
+            pass
+    new_message = bot.send_message(user_id, mess, parse_mode='HTML', reply_markup=reply_markup)
+    bot.user_action.set_last_mess_id(new_message.message_id, user_id)
+
+
+# Меню выбора из списка чатов
+def set_msg(user_id, username):
+
+    title = 'Мой персональный чат'
+    if bot.user_action.check_create_user(user_id, user_id):
+        bot.user_action.set_new_user(chat_id=user_id, user_id=user_id, title=title, username=username)
+
+    groups = bot.user_action.get_groups(user_id)
+    keyboard = types.InlineKeyboardMarkup()
+    button_list = []
+    for i in groups:
+        button_list.append(types.InlineKeyboardButton(text=i[1], callback_data=f'CREATE:{i[0]}'))
+
+    if button_list:
+        button_list.append(types.InlineKeyboardButton(text='⬅️  Отмена', callback_data='CANCEL'))
+    keyboard.add(*button_list)
+    # n_cols = 1 is for single column and multiple rows
+    reply_markup = types.InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    mess = f'Выберите чат, где вы хотите создать напоминание'
+
+    last_mess_id = bot.user_action.get_last_mess_id(user_id)
+    if last_mess_id:
+        try:
+            bot.delete_message(user_id, last_mess_id)
+        except ApiTelegramException:
+            pass
+    new_message = bot.send_message(user_id, mess, parse_mode='HTML', reply_markup=reply_markup)
+    bot.user_action.set_last_mess_id(new_message.message_id, user_id)

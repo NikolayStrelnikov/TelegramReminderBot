@@ -30,6 +30,14 @@ class UserActions:
         self.database_client.execute_command(self.UPDATE_EXIST_USER, (title, username, chat_id, user_id))
         self.database_client.execute_command(self.UPDATE_EXIST_REMIND, (title, username, chat_id, user_id))
 
+    # UPDATE_TITLE ---------------------------------------------------------
+    UPDATE_TITLE_USER = """ UPDATE USERS SET TITLE = ? WHERE CHAT_ID = ?; """
+    UPDATE_TITLE_REMIND = """ UPDATE REMIND SET TITLE = ? WHERE CHAT_ID = ?; """
+
+    def update_title_group(self, chat_id: int, title: str):
+        self.database_client.execute_command(self.UPDATE_TITLE_USER, (title, chat_id))
+        self.database_client.execute_command(self.UPDATE_TITLE_REMIND, (title, chat_id))
+
     # NEW ---------------------------------------------------------
     DELETE_EVENT = """ DELETE FROM REMIND WHERE USER_ID = ? AND STATUS in ('NEW', 'TEXT', 'PERIOD', 'FACTOR'); """
 
@@ -66,7 +74,7 @@ class UserActions:
     def delete_all_by_chat_id(self, chat_id: int):
         self.database_client.execute_command(self.DELETE_ALL_BY_CHAT_ID, (chat_id,))
 
-    # UPDATE -- TEXT -------------------------------------------------------
+    # SET -- TEXT -------------------------------------------------------
     SET_TEXT = """ UPDATE REMIND SET MESSAGE = ?, STATUS = 'TEXT' WHERE ID = ?; """
 
     def set_text(self, message: str, db_id: int):
@@ -77,6 +85,14 @@ class UserActions:
 
     def set_edit_text(self, message: str, db_id: int):
         self.database_client.execute_command(self.EDIT_TEXT, (message, db_id))
+
+    # UPDATE -- CHAT_ID SUPERGROUP--------------------------------------------
+    EDIT_REMIND_CHAT_ID = """ UPDATE REMIND SET CHAT_ID = ? WHERE CHAT_ID = ?; """
+    EDIT_USERS_CHAT_ID = """ UPDATE USERS SET CHAT_ID = ? WHERE CHAT_ID = ?; """
+
+    def edit_group_chat_id(self, new_chat_id: int, old_chat_id: int):
+        self.database_client.execute_command(self.EDIT_REMIND_CHAT_ID, (new_chat_id, old_chat_id))
+        self.database_client.execute_command(self.EDIT_USERS_CHAT_ID, (new_chat_id, old_chat_id))
 
     # PERIOD ---------------------------------------------------------
     SET_DATE = """ UPDATE REMIND SET LAST_UP = ?, NEXT_UP = ?, STATUS = 'PERIOD' WHERE ID = ?; """
@@ -123,7 +139,14 @@ class UserActions:
     def set_status_by_id(self, status: str, edit: str, db_id: int):
         self.database_client.execute_command(self.SET_STATUS_BY_ID, (status, edit, db_id))
 
-    # GETTERS -- SELECT ------------------------------------------
+    # ---------------------------------------------------------
+    SET_STATUS_BY_CHAT_ID = """ UPDATE REMIND SET STATUS = ?, EDIT = ? WHERE CHAT_ID = ?; """
+
+    def set_status_by_chat_id(self, status: str, edit: str, chat_id: int):
+        self.database_client.execute_command(self.SET_STATUS_BY_CHAT_ID, (status, edit, chat_id))
+
+    # GETTERS --
+    # SELECT ------------------------------------------
     GET_GROUPS = """ SELECT CHAT_ID, TITLE FROM USERS WHERE USER_ID = ?; """
 
     def get_groups(self, user_id: int):
@@ -133,7 +156,8 @@ class UserActions:
     # ---------------------------------------------------------
     GET_ACTUAL_QUEUE = """
         SELECT ID, CHAT_ID, LAST_UP, NEXT_UP, PERIOD, FACTOR, MESSAGE FROM REMIND WHERE NEXT_UP = 
-        (SELECT MIN(NEXT_UP) FROM REMIND WHERE NEXT_UP > datetime('now', 'localtime') AND STATUS = 'ACTIVE'); """
+        (SELECT MIN(NEXT_UP) FROM REMIND WHERE NEXT_UP > datetime('now', 'localtime') AND STATUS = 'ACTIVE')  
+        AND STATUS = 'ACTIVE'; """
 
     def get_actual_queue(self):
         return self.database_client.execute_select_command(self.GET_ACTUAL_QUEUE, ())
@@ -152,7 +176,8 @@ class UserActions:
                                 WHERE STATUS IN ('NEW', 'TEXT', 'FACTOR', 'PAUSE') AND USER_ID = ?; """
 
     def get_last_edit_status(self, user_id: int):
-        return self.database_client.execute_select_command(self.GET_LAST_EDIT_STATUS, (user_id,))
+        result = self.database_client.execute_select_command(self.GET_LAST_EDIT_STATUS, (user_id,))
+        return result
 
     GET_LAST_SUB_STEP = """ SELECT EDIT FROM REMIND WHERE ID = ?; """
 
@@ -188,6 +213,12 @@ class UserActions:
         return self.database_client.execute_select_command(self.GET_COUNT_MESS, ())[0][0]
 
     # ---------------------------------------------------------
+    GET_ERROR_MESS = """ SELECT COUNT(ID) FROM REMIND WHERE STATUS='ERROR'; """
+
+    def get_error_mess(self):
+        return self.database_client.execute_select_command(self.GET_ERROR_MESS, ())[0][0]
+
+    # ---------------------------------------------------------
     GET_ALL_USERS = """ SELECT DISTINCT(USERNAME) FROM USERS; """
 
     def get_all_users(self):
@@ -220,6 +251,4 @@ class UserActions:
 #     user_action = UserActions(SQLiteClient('db/remind.db'))
 #     user_action.setup()
 #
-#     print(
-#         user_action.get_last_edit_status(6826849219)[0]
-#     )
+#     user_action.set_edit_chat_id(6826849219, 6826849219)
